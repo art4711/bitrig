@@ -340,6 +340,7 @@ tc_setclock(struct timespec *ts)
 	bt2 = timehands->th_offset;
 	timehands->th_offset = bt;
 
+#if 0
 #ifndef SMALL_KERNEL
 	/* convert the bintime to ticks */
 	bintime_sub(&bt, &bt2);
@@ -350,6 +351,7 @@ tc_setclock(struct timespec *ts)
 			adj_ticks = INT_MAX;
 		timeout_adjust_ticks(adj_ticks);
 	}
+#endif
 #endif
 
 	/* XXX fiddle all the little crinkly bits around the fiords... */
