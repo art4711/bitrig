@@ -1,4 +1,4 @@
-/*	$OpenBSD: timeout.h,v 1.22 2012/05/24 07:17:42 guenther Exp $	*/
+/*	$OpenBSD: timeout.h,v 1.21 2011/05/10 00:58:42 dlg Exp $	*/
 /*
  * Copyright (c) 2000-2001 Artur Grabowski <art@openbsd.org>
  * All rights reserved. 
@@ -51,17 +51,14 @@
  * These functions may be called in interrupt context (anything below splhigh).
  */
 
-struct circq {
-	struct circq *next;		/* next element */
-	struct circq *prev;		/* previous element */
-};
+#include <sys/heap.h>
 
 struct timeout {
-	struct circq to_list;			/* timeout queue, don't move */
-	void (*to_func)(void *);		/* function to call */
-	void *to_arg;				/* function argument */
-	int to_time;				/* ticks on event */
-	int to_flags;				/* misc flags */
+	CHEAP_ENTRY(struct timeout) to_heap;
+	void (*to_func)(void *);	/* function to call */
+	void *to_arg;			/* function argument */
+	int to_time;			/* ticks on event */
+	int to_flags;			/* misc flags */
 };
 
 /*
@@ -71,7 +68,8 @@ struct timeout {
 #define TIMEOUT_INITIALIZED	4	/* timeout is initialized */
 #define TIMEOUT_TRIGGERED	8	/* timeout is running or ran */
 
-#ifdef _KERNEL
+#if defined(_KERNEL) || defined(TEST_HARNESS)
+struct bintime;
 /*
  * special macros
  *
@@ -94,13 +92,14 @@ void timeout_add_nsec(struct timeout *, int);
 int timeout_del(struct timeout *);
 
 void timeout_startup(void);
-void timeout_adjust_ticks(int);
 
 /*
  * called once every hardclock. returns non-zero if we need to schedule a
  * softclock.
  */
 int timeout_hardclock_update(void);
+
+void softclock(void *);
 #endif /* _KERNEL */
 
 #endif	/* _SYS_TIMEOUT_H_ */
