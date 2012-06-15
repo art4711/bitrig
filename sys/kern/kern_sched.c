@@ -194,9 +194,7 @@ sched_exit(struct proc *p)
 	struct proc *idle;
 	int s;
 
-	microuptime(&tv);
-	timersub(&tv, &spc->spc_runtime, &tv);
-	timeradd(&p->p_rtime, &tv, &p->p_rtime);
+	stopwatch_stop(&p->p_runtime);
 
 	LIST_INSERT_HEAD(&spc->spc_deadproc, p, p_hash);
 

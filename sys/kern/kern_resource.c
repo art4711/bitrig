@@ -52,7 +52,7 @@
 
 #include <uvm/uvm_extern.h>
 
-void	tuagg_sub(struct tusage *, struct proc *);
+void	tuagg_sub(struct tusage *, struct proc *, struct timeval *);
 void	tuagg(struct process *, struct proc *);
 
 /*
@@ -338,9 +338,9 @@ sys_getrlimit(struct proc *p, void *v, register_t *retval)
 }
 
 void
-tuagg_sub(struct tusage *tup, struct proc *p)
+tuagg_sub(struct tusage *tup, struct proc *p, struct timeval *runtime)
 {
-	timeradd(&tup->tu_runtime, &p->p_rtime, &tup->tu_runtime);
+	timeradd(&tup->tu_runtime, runtime, &tup->tu_runtime);
 	tup->tu_uticks += p->p_uticks;
 	tup->tu_sticks += p->p_sticks;
 	tup->tu_iticks += p->p_iticks;
@@ -353,9 +353,20 @@ tuagg_sub(struct tusage *tup, struct proc *p)
 void
 tuagg_unlocked(struct process *pr, struct proc *p)
 {
-	tuagg_sub(&pr->ps_tu, p);
-	tuagg_sub(&p->p_tu, p);
-	timerclear(&p->p_rtime);
+	struct timeval runtime;
+
+	if (p->p_stat == SONPROC) {
+		stopwatch_stop(&p->p_runtime);
+		stopwatch_to_tv(&p->p_runtime, &runtime);
+		stopwatch_reset(&p->p_runtime);
+		stopwatch_start(&p->p_runtime);
+	} else {
+		stopwatch_to_tv(&p->p_runtime, &runtime);
+		stopwatch_reset(&p->p_runtime);
+	}
+
+	tuagg_sub(&pr->ps_tu, p, &runtime);
+	tuagg_sub(&p->p_tu, p, &runtime);
 	p->p_uticks = 0;
 	p->p_sticks = 0;
 	p->p_iticks = 0;

@@ -347,7 +347,6 @@ mi_switch(void)
 	struct process *pr = p->p_p;
 	struct rlimit *rlim;
 	rlim_t secs;
-	struct timeval tv;
 #ifdef MULTIPROCESSOR
 	int hold_count;
 	int sched_count;
@@ -373,19 +372,7 @@ mi_switch(void)
 	 * Compute the amount of time during which the current
 	 * process was running, and add that to its total so far.
 	 */
-	microuptime(&tv);
-	if (timercmp(&tv, &spc->spc_runtime, <)) {
-#if 0
-		printf("uptime is not monotonic! "
-		    "tv=%lu.%06lu, runtime=%lu.%06lu\n",
-		    tv.tv_sec, tv.tv_usec, spc->spc_runtime.tv_sec,
-		    spc->spc_runtime.tv_usec);
-#endif
-	} else {
-		timersub(&tv, &spc->spc_runtime, &tv);
-		timeradd(&p->p_rtime, &tv, &p->p_rtime);
-	}
-
+	stopwatch_stop(&p->p_runtime);
 	/* add the time counts for this thread to the process's total */
 	tuagg_unlocked(pr, p);
 
@@ -396,6 +383,7 @@ mi_switch(void)
 	rlim = &pr->ps_limit->pl_rlimit[RLIMIT_CPU];
 	secs = pr->ps_tu.tu_runtime.tv_sec;
 	if (secs >= rlim->rlim_cur) {
+#if 0
 		if (secs >= rlim->rlim_max) {
 			psignal(p, SIGKILL);
 		} else {
@@ -403,6 +391,7 @@ mi_switch(void)
 			if (rlim->rlim_cur < rlim->rlim_max)
 				rlim->rlim_cur += 5;
 		}
+#endif
 	}
 
 	/*
@@ -423,7 +412,7 @@ mi_switch(void)
 	clear_resched(curcpu());
 
 	SCHED_ASSERT_LOCKED();
-
+	stopwatch_start(&p->p_runtime);
 	/*
 	 * To preserve lock ordering, we need to release the sched lock
 	 * and grab it after we grab the big lock.
@@ -443,7 +432,6 @@ mi_switch(void)
 	 */
 	KASSERT(p->p_cpu == curcpu());
 
-	microuptime(&p->p_cpu->ci_schedstate.spc_runtime);
 
 #ifdef MULTIPROCESSOR
 	/*

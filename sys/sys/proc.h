@@ -48,6 +48,7 @@
 #include <sys/mutex.h>			/* For struct mutex */
 #include <sys/resource.h>		/* For struct rusage */
 #include <machine/atomic.h>
+#include <sys/stopwatch.h>
 
 #ifdef _KERNEL
 #define __need_process
@@ -292,7 +293,7 @@ struct proc {
 
 	struct	rusage p_ru;		/* Statistics */
 	struct	tusage p_tu;		/* accumulated times. */
-	struct	timeval p_rtime;	/* Real time. */
+	struct	stopwatch p_runtime;	/* runtime stopwatch */
 	u_int	p_uticks;		/* Statclock hits in user mode. */
 	u_int	p_sticks;		/* Statclock hits in system mode. */
 	u_int	p_iticks;		/* Statclock hits processing intr. */

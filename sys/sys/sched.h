@@ -94,7 +94,6 @@
  * XXX - expose to userland for now.
  */
 struct schedstate_percpu {
-	struct timeval spc_runtime;	/* time curproc started running */
 	__volatile int spc_schedflags;	/* flags; see below */
 	u_int spc_schedticks;		/* ticks for schedclock() */
 	u_int64_t spc_cp_time[CPUSTATES]; /* CPU state statistics */

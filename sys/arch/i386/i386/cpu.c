@@ -469,6 +469,7 @@ void
 cpu_hatch(void *v)
 {
 	struct cpu_info *ci = (struct cpu_info *)v;
+	struct proc *p;
 	int s;
 
 	cpu_init_idt();
@@ -489,11 +490,12 @@ cpu_hatch(void *v)
 	if (mp_verbose)
 		printf("%s: CPU at apid %ld running\n",
 		    ci->ci_dev.dv_xname, ci->ci_cpuid);
-	microuptime(&ci->ci_schedstate.spc_runtime);
 	splx(s);
 
 	SCHED_LOCK(s);
-	cpu_switchto(NULL, sched_chooseproc());
+	p = sched_chooseproc();
+	stopwatch_start(&p->p_runtime);
+	cpu_switchto(NULL, p);
 }
 
 void

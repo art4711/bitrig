@@ -573,6 +573,8 @@ pidtaken(pid_t pid)
 /*
  * XXX This is a slight hack to get newly-formed processes to
  * XXX acquire the kernel lock as soon as they run.
+ * XXX This should roughly match the post-cpu_switch part of
+ * XXX mi_switch.
  */
 void
 proc_trampoline_mp(void)
@@ -582,6 +584,7 @@ proc_trampoline_mp(void)
 	p = curproc;
 
 	SCHED_ASSERT_LOCKED();
+	stopwatch_start(&p->p_runtime);
 	__mp_unlock(&sched_lock);
 	spl0();
 	SCHED_ASSERT_UNLOCKED();

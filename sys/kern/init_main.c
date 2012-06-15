@@ -491,14 +491,16 @@ main(void *framep)
 
 	/*
 	 * Now can look at time, having had a chance to verify the time
-	 * from the file system.  Reset p->p_rtime as it may have been
+	 * from the file system.  Reset p->p_runtime as it may have been
 	 * munched in mi_switch() after the time got set.
 	 */
 	microtime(&boottime);
 	LIST_FOREACH(p, &allproc, p_list) {
+		/* XXX - is this really necessary? */
 		p->p_p->ps_start = boottime;
-		microuptime(&p->p_cpu->ci_schedstate.spc_runtime);
-		p->p_rtime.tv_sec = p->p_rtime.tv_usec = 0;
+		stopwatch_reset(&p->p_runtime);
+		if (p->p_stat == SONPROC)		/* XXX */
+			stopwatch_start(&p->p_runtime);
 	}
 
 	uvm_swap_init();

@@ -113,7 +113,7 @@ settime(struct timespec *ts)
 int
 clock_gettime(struct proc *p, clockid_t clock_id, struct timespec *tp)
 {
-	struct timeval tv;
+	int s;
 
 	switch (clock_id) {
 	case CLOCK_REALTIME:
@@ -123,11 +123,10 @@ clock_gettime(struct proc *p, clockid_t clock_id, struct timespec *tp)
 		nanouptime(tp);
 		break;
 	case CLOCK_PROF:
-		microuptime(&tv);
-		timersub(&tv, &curcpu()->ci_schedstate.spc_runtime, &tv);
-		timeradd(&tv, &p->p_rtime, &tv);
-		tp->tv_sec = tv.tv_sec;
-		tp->tv_nsec = tv.tv_usec * 1000;
+		SCHED_LOCK(s);
+		tuagg_unlocked(p->p_p, p);
+		TIMEVAL_TO_TIMESPEC(&p->p_tu.tu_runtime, tp);
+		SCHED_UNLOCK(s);
 		break;
 	default:
 		return (EINVAL);
