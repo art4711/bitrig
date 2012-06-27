@@ -72,7 +72,20 @@ struct ctlname {
 #define	CTLTYPE_INT	2	/* name describes an integer */
 #define	CTLTYPE_STRING	3	/* name describes a string */
 #define	CTLTYPE_QUAD	4	/* name describes a 64-bit number */
+#define	CTLTYPE_S64	CTLTYPE_QUAD
 #define	CTLTYPE_STRUCT	5	/* name describes a structure */
+#define	CTLTYPE_OPAQUE	CTLTYPE_STRUCT
+#define	CTLTYPE_UINT	6	/* name describes an unsigned integer */
+#define	CTLTYPE_LONG	7	/* name describes a long */
+#define	CTLTYPE_ULONG	8	/* name describes an unsigned long */
+#define	CTLTYPE_U64	9	/* name describes an unsigned 64-bit number */
+
+#define CTLFLAG_RD      0x80000000      /* Allow reads of variable */
+#define CTLFLAG_WR      0x40000000      /* Allow writes to the variable */
+#define CTLFLAG_RW      (CTLFLAG_RD|CTLFLAG_WR)
+#define CTLFLAG_MPSAFE	0x20000000	
+#define CTLFLAG_ANYBODY	0x10000000	/* All users can set this var */
+#define CTLFLAG_SKIP	0x01000000	/* Skip this sysctl when listing */
 
 /*
  * Top-level identifiers
@@ -984,11 +997,6 @@ int pipex_sysctl(int *, u_int, void *, size_t *, void *, size_t);
 
 #include <sys/linker_set.h>
 
-#define CTLFLAG_RD      0x80000000      /* Allow reads of variable */
-#define CTLFLAG_WR      0x40000000      /* Allow writes to the variable */
-#define CTLFLAG_RW      (CTLFLAG_RD|CTLFLAG_WR)
-#define CTLFLAG_MPSAFE	0x20000000	
-
 #define OID_AUTO (-1)
 #define CTL_AUTO_START	65536
 
@@ -1056,6 +1064,11 @@ int sysctl_user_out(struct sysctl_req *req, const void *p, size_t l);
 	SYSCTL_OID(parent, nbr, name,					\
 	    CTLTYPE_INT | CTLFLAG_MPSAFE | (access),			\
 	    ptr, val, sysctl_handle_int, "I", descr)
+
+/* Oid for a procedure.  Specified by a pointer and an arg. */
+#define SYSCTL_PROC(parent, nbr, name, access, ptr, arg, handler, fmt, descr) \
+	SYSCTL_OID(parent, nbr, name, (access),				 \
+		ptr, arg, handler, fmt, descr)
 
 #else	/* !_KERNEL */
 #include <sys/cdefs.h>
