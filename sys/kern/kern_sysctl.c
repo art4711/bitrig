@@ -121,6 +121,8 @@ int sysctl_sensors(int *, u_int, void *, size_t *, void *, size_t);
 int sysctl_emul(int *, u_int, void *, size_t *, void *, size_t);
 int sysctl_cptime2(int *, u_int, void *, size_t *, void *, size_t);
 
+int sysctl_dynamic(struct proc *p, int *, int, struct sys___sysctl_args *);
+
 int (*cpu_cpuspeed)(int *);
 void (*cpu_setperf)(int);
 int perflevel = 100;
@@ -153,6 +155,7 @@ sys___sysctl(struct proc *p, void *v, register_t *retval)
 	if (SCARG(uap, new) != NULL &&
 	    (error = suser(p, 0)))
 		return (error);
+
 	/*
 	 * all top-level sysctl names are non-terminal
 	 */
@@ -161,6 +164,14 @@ sys___sysctl(struct proc *p, void *v, register_t *retval)
 	error = copyin(SCARG(uap, name), name,
 		       SCARG(uap, namelen) * sizeof(int));
 	if (error)
+		return (error);
+
+	error = sysctl_dynamic(p, name, SCARG(uap, namelen), uap);
+	/*
+	 * If it didn't fail or failed with something other than ENOENT
+	 * it means that sysctl_dynamic handled it.
+	 */
+	if (error != ENOENT)
 		return (error);
 
 	switch (name[0]) {
@@ -2162,3 +2173,198 @@ sysctl_cptime2(int *name, u_int namelen, void *oldp, size_t *oldlenp,
 	    &ci->ci_schedstate.spc_cp_time,
 	    sizeof(ci->ci_schedstate.spc_cp_time)));
 }
+
+/*
+ * Dynamic sysctls.
+ */
+
+#define SYSCTL_ASSERT_XLOCKED()
+
+struct sysctl_oid *sysctl_find_oidname(const char *name, struct sysctl_oid_list *list);
+int sysctl_find_oid(int *name, int namelen, struct sysctl_oid **res);
+void sysctl_register_oid(struct sysctl_oid *oidp);
+
+struct sysctl_oid_list sysctl__children;		/* Root list */
+
+void
+sysctl_dynamic_init(void)
+{
+	LINKER_SET_DECLARE(sysctl_set, struct sysctl_oid);
+	struct sysctl_oid **o;
+
+	LINKER_SET_FOREACH(o, sysctl_set) {
+		sysctl_register_oid(*o);
+	}
+}
+
+struct sysctl_oid *
+sysctl_find_oidname(const char *name, struct sysctl_oid_list *list)
+{
+	struct sysctl_oid *oidp;
+
+	SYSCTL_ASSERT_XLOCKED();
+	SLIST_FOREACH(oidp, list, oid_link) {
+		if (strcmp(oidp->oid_name, name) == 0) {
+			return (oidp);
+		}
+	}
+	return (NULL);
+}
+
+void
+sysctl_register_oid(struct sysctl_oid *oidp)
+{
+	struct sysctl_oid_list *parent = oidp->oid_parent;
+	struct sysctl_oid *p;
+	struct sysctl_oid *q;
+
+	/*
+	 * First check if another oid with the same name already
+	 * exists in the parent's list.
+	 */
+	SYSCTL_ASSERT_XLOCKED();
+	p = sysctl_find_oidname(oidp->oid_name, parent);
+	if (p != NULL) {
+		if ((p->oid_kind & CTLTYPE_MASK) == CTLTYPE_NODE) {
+#if 0
+			p->oid_refcnt++;
+#endif
+			return;
+		} else {
+			printf("can't re-use a leaf (%s)!\n", p->oid_name);
+			return;
+		}
+	}
+	/*
+	 * If this oid has a number OID_AUTO, give it a number which
+	 * is greater than any current oid.
+	 * NOTE: DO NOT change the starting value here, change it in
+	 * <sys/sysctl.h>, and make sure it is at least 256 to
+	 * accomodate e.g. net.inet.raw as a static sysctl node.
+	 */
+	if (oidp->oid_number == OID_AUTO) {
+		static int newoid = CTL_AUTO_START;
+
+		oidp->oid_number = newoid++;
+		if (newoid == 0x7fffffff)
+			panic("out of oids");
+	}
+#if 0
+	else if (oidp->oid_number >= CTL_AUTO_START) {
+		/* do not panic; this happens when unregistering sysctl sets */
+		printf("static sysctl oid too high: %d", oidp->oid_number);
+	}
+#endif
+
+	/*
+	 * Insert the oid into the parent's list in order.
+	 */
+	q = NULL;
+	SLIST_FOREACH(p, parent, oid_link) {
+		if (oidp->oid_number < p->oid_number)
+			break;
+		q = p;
+	}
+	if (q)
+		SLIST_INSERT_AFTER(q, oidp, oid_link);
+	else
+		SLIST_INSERT_HEAD(parent, oidp, oid_link);
+}
+
+int
+sysctl_find_oid(int *name, int namelen, struct sysctl_oid **res)
+{
+	struct sysctl_oid_list *lsp;
+	struct sysctl_oid *oid;
+	int i;
+
+	if (namelen < 0 || namelen > CTL_MAXNAME)
+		return EINVAL;
+
+	lsp = &sysctl__children;
+	for (i = 0; i < namelen; i++) {
+#if 0
+		printf("looking for: %d (%d)\n", name[i], i);
+#endif
+		SLIST_FOREACH(oid, lsp, oid_link) {
+			if (oid->oid_number == name[i])
+				break;
+		}
+		if (oid == NULL)
+			return ENOENT;
+#if 0
+		printf("found\n");
+#endif
+		if ((oid->oid_kind & CTLTYPE_MASK) == CTLTYPE_NODE) {
+			lsp = SYSCTL_CHILDREN(oid);
+		} else {
+			break;
+		}
+	}
+	if (i != namelen - 1)
+		return ENOENT;
+	*res = oid;
+	return 0;
+}
+
+int
+sysctl_dynamic(struct proc *p, int *name, int namelen, struct sys___sysctl_args *uap)
+{
+	struct sysctl_oid *oid;
+	int error;
+
+#if 0
+        struct sys___sysctl_args /* {
+                syscallarg(int *) name;
+                syscallarg(u_int) namelen;
+                syscallarg(void *) old;
+                syscallarg(size_t *) oldlenp;
+                syscallarg(void *) new;
+                syscallarg(size_t) newlen;
+        } */ *uap = v;
+#endif
+
+
+	if ((error = sysctl_find_oid(name, namelen, &oid)) != 0)
+		return error;
+
+	if (SCARG(uap, new)) {
+		if (!(oid->oid_kind & CTLFLAG_WR))
+			return EPERM;
+		if ((error = suser(p, 0)) != 0)
+			return error;
+	}
+
+	if (oid->oid_handler == NULL)
+		return EINVAL;
+
+	/* We don't handle this yet. */
+	if ((oid->oid_kind & CTLTYPE_MASK) == CTLTYPE_NODE)
+		return EISDIR;
+
+	error = oid->oid_handler(oid, SCARG(uap, old), SCARG(uap, oldlenp),
+	    SCARG(uap, new), SCARG(uap, newlen));
+
+	return (error);
+}
+
+/*
+ * Validate parameters and get old / set new parameters
+ * for an integer-valued sysctl function.
+ */
+int
+sysctl_handle_int(struct sysctl_oid *oid, void *oldp, size_t *oldlenp, void *newp, size_t newlen)
+{
+	printf("sysctl_handle_int\n");
+	if (oid->oid_arg1)
+		return sysctl_int(oldp, oldlenp, newp, newlen, (int *)oid->oid_arg1);
+	else
+		return sysctl_rdint(oldp, oldlenp, newp, oid->oid_arg2);
+}
+
+#if 0
+SYSCTL_NODE(, 0, _sysctl, CTLFLAG_RW, 0, "Sysctl internal magic");
+#endif
+
+SYSCTL_NODE(, 1, kern, CTLFLAG_RW, 0, "Kernel");
+SYSCTL_INT(_kern, KERN_MAXVNODES, maxvnodes, CTLFLAG_RW, &maxvnodes, 0, "Max number of vnodes");

@@ -535,6 +535,8 @@ main(void *framep)
 
 	domountroothooks();
 
+	sysctl_dynamic_init();
+
 	/*
 	 * Okay, now we can let init(8) exec!  It's off to userland!
 	 */

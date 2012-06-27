@@ -67,6 +67,7 @@ struct ctlname {
 	char	*ctl_name;	/* subsystem name */
 	int	ctl_type;	/* type of name */
 };
+#define CTLTYPE_MASK	0xf
 #define	CTLTYPE_NODE	1	/* name is a node */
 #define	CTLTYPE_INT	2	/* name describes an integer */
 #define	CTLTYPE_STRING	3	/* name describes a string */
@@ -973,6 +974,73 @@ extern void (*cpu_setperf)(int);
 int bpf_sysctl(int *, u_int, void *, size_t *, void *, size_t);
 int pflow_sysctl(int *, u_int, void *, size_t *, void *, size_t);
 int pipex_sysctl(int *, u_int, void *, size_t *, void *, size_t);
+
+/*
+ * Dynamic sysctls
+ *
+ * This is a currently simplified version of FreeBSD sysctls.
+ * Not all features are implemented but the API should remain close enough.
+ */
+
+#include <sys/linker_set.h>
+
+#define CTLFLAG_RD      0x80000000      /* Allow reads of variable */
+#define CTLFLAG_WR      0x40000000      /* Allow writes to the variable */
+#define CTLFLAG_RW      (CTLFLAG_RD|CTLFLAG_WR)
+#define CTLFLAG_MPSAFE	0x20000000	
+
+#define OID_AUTO (-1)
+#define CTL_AUTO_START	65536
+
+void sysctl_dynamic_init(void);
+
+SLIST_HEAD(sysctl_oid_list, sysctl_oid);
+struct sysctl_oid {
+	struct sysctl_oid_list *oid_parent;
+	SLIST_ENTRY(sysctl_oid) oid_link;
+	int oid_number;
+	u_int oid_kind;
+	void *oid_arg1;
+        __intptr_t oid_arg2;
+        const char *oid_name;
+	int (*oid_handler)(struct sysctl_oid *, void *, size_t *, void *,
+	    size_t);
+        const char *oid_fmt;
+        const char *oid_descr;
+};
+
+int sysctl_handle_int(struct sysctl_oid *, void *, size_t *, void *, size_t);
+
+#ifdef SMALL_KERNEL
+#define SYSCTL_DESCR(d)
+#else
+#define SYSCTL_DESCR(d) d
+#endif
+
+#define SYSCTL_NODE_CHILDREN(parent, name) \
+	sysctl_##parent##_##name##_children
+
+#define	SYSCTL_CHILDREN(oid_ptr) (struct sysctl_oid_list *) \
+	(oid_ptr)->oid_arg1
+
+/* This constructs a "raw" MIB oid. */
+#define SYSCTL_OID(parent, nbr, name, kind, a1, a2, handler, fmt, descr)\
+	static struct sysctl_oid sysctl__##parent##_##name = {		\
+		&sysctl_##parent##_children, { NULL }, nbr, kind,	\
+		a1, a2, #name, handler, fmt, SYSCTL_DESCR(descr) };			\
+	LINKER_SET_ADD_DATA(sysctl_set, sysctl__##parent##_##name)
+
+/* This constructs a node from which other oids can hang. */
+#define SYSCTL_NODE(parent, nbr, name, access, handler, descr)		\
+	struct sysctl_oid_list SYSCTL_NODE_CHILDREN(parent, name);	\
+	SYSCTL_OID(parent, nbr, name, CTLTYPE_NODE|(access),		\
+            (void*)&SYSCTL_NODE_CHILDREN(parent, name), 0, handler, "N", descr)
+
+/* Oid for an int.  If ptr is NULL, val is returned. */
+#define SYSCTL_INT(parent, nbr, name, access, ptr, val, descr)		\
+	SYSCTL_OID(parent, nbr, name,					\
+	    CTLTYPE_INT | CTLFLAG_MPSAFE | (access),			\
+	    ptr, val, sysctl_handle_int, "I", descr)
 
 #else	/* !_KERNEL */
 #include <sys/cdefs.h>
