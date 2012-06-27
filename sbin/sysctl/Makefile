@@ -2,6 +2,7 @@
 
 PROG=	sysctl
 MAN=	sysctl.8
+SRCS= sysctl.c dyn_sysctl.c
 
 CPPFLAGS+=	-DINET6 -D_LIBKVM
 

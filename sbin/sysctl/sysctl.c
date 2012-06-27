@@ -217,6 +217,9 @@ void vfsinit(void);
 
 char *equ = "=";
 
+void dyn_sysctl_all(void);
+int dyn_parse(const char *);
+
 int
 main(int argc, char *argv[])
 {
@@ -257,10 +260,13 @@ main(int argc, char *argv[])
 		vfsinit();
 		for (lvl1 = 1; lvl1 < CTL_MAXID; lvl1++)
 			listall(topname[lvl1].ctl_name, &secondlevel[lvl1]);
+		dyn_sysctl_all();
 		return (0);
 	}
-	for (; *argv != NULL; ++argv)
-		parse(*argv, 1);
+	for (; *argv != NULL; ++argv) {
+		if (dyn_parse(*argv) == -1)
+			parse(*argv, 1);
+	}
 	return (0);
 }
 
