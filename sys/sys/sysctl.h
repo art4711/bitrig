@@ -994,6 +994,15 @@ int pipex_sysctl(int *, u_int, void *, size_t *, void *, size_t);
 
 void sysctl_dynamic_init(void);
 
+struct sysctl_req {
+	void *oldptr;
+	size_t oldlen;
+	size_t oldidx;
+	void *newptr;
+	size_t newlen;
+	size_t newidx;
+};
+
 SLIST_HEAD(sysctl_oid_list, sysctl_oid);
 struct sysctl_oid {
 	struct sysctl_oid_list *oid_parent;
@@ -1003,13 +1012,19 @@ struct sysctl_oid {
 	void *oid_arg1;
         __intptr_t oid_arg2;
         const char *oid_name;
-	int (*oid_handler)(struct sysctl_oid *, void *, size_t *, void *,
-	    size_t);
+	int (*oid_handler)(struct sysctl_oid *, void *, __intptr_t,
+	    struct sysctl_req *);
         const char *oid_fmt;
         const char *oid_descr;
 };
 
-int sysctl_handle_int(struct sysctl_oid *, void *, size_t *, void *, size_t);
+int sysctl_handle_int(struct sysctl_oid *, void *, __intptr_t, struct sysctl_req *);
+
+int sysctl_user_in(struct sysctl_req *req, const void *p, size_t l);
+int sysctl_user_out(struct sysctl_req *req, const void *p, size_t l);
+
+#define SYSCTL_IN(r, p, l) sysctl_user_in(r, p, l)
+#define SYSCTL_OUT(r, p, l) sysctl_user_out(r, p, l)
 
 #ifdef SMALL_KERNEL
 #define SYSCTL_DESCR(d)

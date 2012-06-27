@@ -320,8 +320,10 @@ kern_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		return (sysctl_rdstring(oldp, oldlenp, newp, osversion));
 	case KERN_VERSION:
 		return (sysctl_rdstring(oldp, oldlenp, newp, version));
+#if 0
 	case KERN_MAXVNODES:
 		return(sysctl_int(oldp, oldlenp, newp, newlen, &maxvnodes));
+#endif
 	case KERN_MAXPROC:
 		return (sysctl_int(oldp, oldlenp, newp, newlen, &maxprocess));
 	case KERN_MAXFILES:
@@ -2179,10 +2181,12 @@ sysctl_cptime2(int *name, u_int namelen, void *oldp, size_t *oldlenp,
  */
 
 #define SYSCTL_ASSERT_XLOCKED()
+#define SYSCTL_XLOCK()
+#define SYSCTL_XUNLOCK()
 
-struct sysctl_oid *sysctl_find_oidname(const char *name, struct sysctl_oid_list *list);
-int sysctl_find_oid(int *name, int namelen, struct sysctl_oid **res);
-void sysctl_register_oid(struct sysctl_oid *oidp);
+struct sysctl_oid *sysctl_find_oidname(const char *, struct sysctl_oid_list *);
+int sysctl_find_oid(int *, int, struct sysctl_oid **, int *);
+void sysctl_register_oid(struct sysctl_oid *);
 
 struct sysctl_oid_list sysctl__children;		/* Root list */
 
@@ -2272,61 +2276,76 @@ sysctl_register_oid(struct sysctl_oid *oidp)
 }
 
 int
-sysctl_find_oid(int *name, int namelen, struct sysctl_oid **res)
+sysctl_find_oid(int *name, int namelen, struct sysctl_oid **noid, int *nindx)
 {
 	struct sysctl_oid_list *lsp;
 	struct sysctl_oid *oid;
-	int i;
+	int indx;
 
-	if (namelen < 0 || namelen > CTL_MAXNAME)
-		return EINVAL;
-
+	SYSCTL_ASSERT_XLOCKED();
 	lsp = &sysctl__children;
-	for (i = 0; i < namelen; i++) {
-#if 0
-		printf("looking for: %d (%d)\n", name[i], i);
-#endif
+	indx = 0;
+	while (indx < CTL_MAXNAME) {
 		SLIST_FOREACH(oid, lsp, oid_link) {
-			if (oid->oid_number == name[i])
+			if (oid->oid_number == name[indx])
 				break;
 		}
 		if (oid == NULL)
-			return ENOENT;
-#if 0
-		printf("found\n");
-#endif
+			return (ENOENT);
+
+		indx++;
 		if ((oid->oid_kind & CTLTYPE_MASK) == CTLTYPE_NODE) {
+			if (oid->oid_handler != NULL || indx == namelen) {
+				*noid = oid;
+				if (nindx != NULL)
+					*nindx = indx;
+				return (0);
+			}
 			lsp = SYSCTL_CHILDREN(oid);
+		} else if (indx == namelen) {
+			*noid = oid;
+			if (nindx != NULL)
+				*nindx = indx;
+			return (0);
 		} else {
-			break;
+			return (ENOTDIR);
 		}
 	}
-	if (i != namelen - 1)
-		return ENOENT;
-	*res = oid;
-	return 0;
+	return (ENOENT);
 }
 
 int
-sysctl_dynamic(struct proc *p, int *name, int namelen, struct sys___sysctl_args *uap)
+sysctl_dynamic(struct proc *p, int *name, int namelen,
+    struct sys___sysctl_args *uap)
 {
 	struct sysctl_oid *oid;
-	int error;
+	struct sysctl_req req;
+	int error, indx;
+	void *arg1;
+	__intptr_t arg2;
 
-#if 0
-        struct sys___sysctl_args /* {
-                syscallarg(int *) name;
-                syscallarg(u_int) namelen;
-                syscallarg(void *) old;
-                syscallarg(size_t *) oldlenp;
-                syscallarg(void *) new;
-                syscallarg(size_t) newlen;
-        } */ *uap = v;
-#endif
+	memset(&req, 0, sizeof(req));
+	req.oldptr = SCARG(uap, old);
+	if (SCARG(uap, oldlenp)) {
+		if ((error = copyin(SCARG(uap, oldlenp), &req.oldlen,
+		    sizeof(req.oldlen))) != 0)
+			return error;
+	}
+	req.newptr = SCARG(uap, new);
+	req.newlen = SCARG(uap, newlen);
 
-
-	if ((error = sysctl_find_oid(name, namelen, &oid)) != 0)
+	if ((error = sysctl_find_oid(name, namelen, &oid, &indx)) != 0)
 		return error;
+
+	if ((oid->oid_kind & CTLTYPE_MASK) == CTLTYPE_NODE) {
+		/*
+		 * You can't call a sysctl when it's a node, but has
+		 * no handler.  Inform the user that it's a node.
+		 * The indx may or may not be the same as namelen.
+		 */
+		if (oid->oid_handler == NULL)
+			return (EISDIR);
+	}
 
 	if (SCARG(uap, new)) {
 		if (!(oid->oid_kind & CTLFLAG_WR))
@@ -2338,12 +2357,19 @@ sysctl_dynamic(struct proc *p, int *name, int namelen, struct sys___sysctl_args 
 	if (oid->oid_handler == NULL)
 		return EINVAL;
 
-	/* We don't handle this yet. */
-	if ((oid->oid_kind & CTLTYPE_MASK) == CTLTYPE_NODE)
-		return EISDIR;
+	if ((oid->oid_kind & CTLTYPE_MASK) == CTLTYPE_NODE) {
+		arg1 = ((int *)name + indx);
+		arg2 = namelen - indx;
+	} else {
+		arg1 = oid->oid_arg1;
+		arg2 = oid->oid_arg2;
+	}
 
-	error = oid->oid_handler(oid, SCARG(uap, old), SCARG(uap, oldlenp),
-	    SCARG(uap, new), SCARG(uap, newlen));
+	error = oid->oid_handler(oid, arg1, arg2, &req);
+
+	if (SCARG(uap, oldlenp))
+		error = copyout(&req.oldidx, SCARG(uap, oldlenp),
+		    sizeof(req.oldidx));
 
 	return (error);
 }
@@ -2353,18 +2379,125 @@ sysctl_dynamic(struct proc *p, int *name, int namelen, struct sys___sysctl_args 
  * for an integer-valued sysctl function.
  */
 int
-sysctl_handle_int(struct sysctl_oid *oid, void *oldp, size_t *oldlenp, void *newp, size_t newlen)
+sysctl_handle_int(struct sysctl_oid *oid, void *arg1, __intptr_t arg2,
+    struct sysctl_req *req)
 {
-	printf("sysctl_handle_int\n");
-	if (oid->oid_arg1)
-		return sysctl_int(oldp, oldlenp, newp, newlen, (int *)oid->oid_arg1);
+	int tmpout, error = 0;
+
+	/*
+	 * Attempt to get a coherent snapshot by making a copy of the data.
+	 */
+	if (arg1)
+		tmpout = *(int *)arg1;
 	else
-		return sysctl_rdint(oldp, oldlenp, newp, oid->oid_arg2);
+		tmpout = arg2;
+	error = SYSCTL_OUT(req, &tmpout, sizeof(int));
+
+	if (error || !req->newptr)
+		return (error);
+
+	if (!arg1)
+		error = EPERM;
+	else
+		error = SYSCTL_IN(req, arg1, sizeof(int));
+	return (error);
 }
 
-#if 0
-SYSCTL_NODE(, 0, _sysctl, CTLFLAG_RW, 0, "Sysctl internal magic");
-#endif
+int
+sysctl_user_out(struct sysctl_req *req, const void *p, size_t l)
+{
+	size_t i, len, origidx;
+	int error;
+
+	origidx = req->oldidx;
+	req->oldidx += l;
+	if (req->oldptr == NULL)
+		return 0;
+	i = l;
+	len = req->oldlen;
+	if (i > len - origidx)
+		i = len - origidx;
+	if ((error = copyout(p, (char *)req->oldptr + origidx, i)) != 0)
+		return error;
+	if (i < l)
+		return ENOMEM;
+	return 0;
+}
+
+int
+sysctl_user_in(struct sysctl_req *req, const void *p, size_t l)
+{
+	int error;
+
+	if (!req->newptr)
+		return (0);
+	if (req->newlen - req->newidx < l)
+		return (EINVAL);
+	error = copyin((char *)req->newptr + req->newidx, (void *)p, l);
+	req->newidx += l;
+	return (error);
+}
+
+static int
+sysctl_sysctl_name(struct sysctl_oid *oidp, void *arg1, __intptr_t arg2,
+    struct sysctl_req *req)
+{
+	int *name = (int *) arg1;
+	u_int namelen = arg2;
+	int error = 0;
+	struct sysctl_oid *oid;
+	struct sysctl_oid_list *lsp = &sysctl__children, *lsp2;
+	char buf[10];
+
+	SYSCTL_XLOCK();
+	while (namelen) {
+		if (!lsp) {
+			snprintf(buf,sizeof(buf),"%d",*name);
+			if (req->oldidx)
+				error = SYSCTL_OUT(req, ".", 1);
+			if (!error)
+				error = SYSCTL_OUT(req, buf, strlen(buf));
+			if (error)
+				goto out;
+			namelen--;
+			name++;
+			continue;
+		}
+		lsp2 = 0;
+		SLIST_FOREACH(oid, lsp, oid_link) {
+			if (oid->oid_number != *name)
+				continue;
+
+			if (req->oldidx)
+				error = SYSCTL_OUT(req, ".", 1);
+			if (!error)
+				error = SYSCTL_OUT(req, oid->oid_name,
+					strlen(oid->oid_name));
+			if (error)
+				goto out;
+
+			namelen--;
+			name++;
+
+			if ((oid->oid_kind & CTLTYPE_MASK) != CTLTYPE_NODE) 
+				break;
+
+			if (oid->oid_handler)
+				break;
+
+			lsp2 = SYSCTL_CHILDREN(oid);
+			break;
+		}
+		lsp = lsp2;
+	}
+	error = SYSCTL_OUT(req, "", 1);
+ out:
+	SYSCTL_XUNLOCK();
+	return (error);
+}
+
+SYSCTL_NODE(, 0, sysctl, CTLFLAG_RW, 0, "Sysctl internal magic");
+SYSCTL_NODE(_sysctl, 1, name, CTLFLAG_RD, sysctl_sysctl_name, "");
 
 SYSCTL_NODE(, 1, kern, CTLFLAG_RW, 0, "Kernel");
 SYSCTL_INT(_kern, KERN_MAXVNODES, maxvnodes, CTLFLAG_RW, &maxvnodes, 0, "Max number of vnodes");
