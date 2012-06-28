@@ -165,6 +165,7 @@ u_char const char_type[] = {
 
 struct ttylist_head ttylist;	/* TAILQ_HEAD */
 int tty_count;
+static SYSCTL_INT(_kern, KERN_TTYCOUNT, ttycount, CTLFLAG_RD, &tty_count, 0, "Number of open ttys");
 
 int64_t tk_cancc, tk_nin, tk_nout, tk_rawcc;
 

@@ -48,6 +48,7 @@
 #include <sys/tty.h>
 #include <sys/signalvar.h>
 #include <sys/pool.h>
+#include <sys/sysctl.h>
 
 #define	UIHASH(uid)	(&uihashtbl[(uid) & uihash])
 LIST_HEAD(uihashhead, uidinfo) *uihashtbl;
@@ -75,6 +76,8 @@ static void orphanpg(struct pgrp *);
 #ifdef DEBUG
 void pgrpdump(void);
 #endif
+
+static SYSCTL_INT(_kern, KERN_MAXPROC, maxproc, CTLFLAG_RW, &maxprocess, 0, "Maximum number of processes");
 
 /*
  * Initialize global process hashing structures.

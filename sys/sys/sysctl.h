@@ -86,6 +86,7 @@ struct ctlname {
 #define CTLFLAG_MPSAFE	0x20000000	
 #define CTLFLAG_ANYBODY	0x10000000	/* All users can set this var */
 #define CTLFLAG_SKIP	0x01000000	/* Skip this sysctl when listing */
+#define CTLFLAG_TSTR	0x00000100	/* Allow truncated string reads */
 
 /*
  * Top-level identifiers
@@ -953,6 +954,7 @@ int sysctl_doprof(int *, u_int, void *, size_t *, void *, size_t);
 #endif
 int sysctl_dopool(int *, u_int, char *, size_t *);
 
+struct filedesc;
 void fill_file2(struct kinfo_file2 *, struct file *, struct filedesc *,
     int, struct vnode *, struct proc *, struct proc *);
 
@@ -1027,6 +1029,10 @@ struct sysctl_oid {
 };
 
 int sysctl_handle_int(struct sysctl_oid *, void *, __intptr_t, struct sysctl_req *);
+int sysctl_handle_long(struct sysctl_oid *, void *, __intptr_t, struct sysctl_req *);
+int sysctl_handle_64(struct sysctl_oid *, void *, __intptr_t, struct sysctl_req *);
+int sysctl_handle_string(struct sysctl_oid *, void *, __intptr_t, struct sysctl_req *);
+int sysctl_handle_opaque(struct sysctl_oid *, void *, __intptr_t, struct sysctl_req *);
 
 int sysctl_user_in(struct sysctl_req *req, const void *p, size_t l);
 int sysctl_user_out(struct sysctl_req *req, const void *p, size_t l);
@@ -1040,6 +1046,9 @@ int sysctl_user_out(struct sysctl_req *req, const void *p, size_t l);
 #define SYSCTL_DESCR(d) d
 #endif
 
+#define SYSCTL_DECL(name) \
+	extern struct sysctl_oid_list sysctl_##name##_children
+
 #define SYSCTL_NODE_CHILDREN(parent, name) \
 	sysctl_##parent##_##name##_children
 
@@ -1050,7 +1059,7 @@ int sysctl_user_out(struct sysctl_req *req, const void *p, size_t l);
 #define SYSCTL_OID(parent, nbr, name, kind, a1, a2, handler, fmt, descr)\
 	static struct sysctl_oid sysctl__##parent##_##name = {		\
 		&sysctl_##parent##_children, { NULL }, nbr, kind,	\
-		a1, a2, #name, handler, fmt, SYSCTL_DESCR(descr) };			\
+		a1, a2, #name, handler, fmt, SYSCTL_DESCR(descr) };	\
 	LINKER_SET_ADD_DATA(sysctl_set, sysctl__##parent##_##name)
 
 /* This constructs a node from which other oids can hang. */
@@ -1059,16 +1068,65 @@ int sysctl_user_out(struct sysctl_req *req, const void *p, size_t l);
 	SYSCTL_OID(parent, nbr, name, CTLTYPE_NODE|(access),		\
             (void*)&SYSCTL_NODE_CHILDREN(parent, name), 0, handler, "N", descr)
 
+/* Oid for a string.  len can be 0 to indicate '\0' termination. */
+#define SYSCTL_STRING(parent, nbr, name, access, arg, len, descr)	\
+	SYSCTL_OID(parent, nbr, name, CTLTYPE_STRING|(access),		\
+		arg, len, sysctl_handle_string, "A", descr)
+
 /* Oid for an int.  If ptr is NULL, val is returned. */
 #define SYSCTL_INT(parent, nbr, name, access, ptr, val, descr)		\
 	SYSCTL_OID(parent, nbr, name,					\
 	    CTLTYPE_INT | CTLFLAG_MPSAFE | (access),			\
 	    ptr, val, sysctl_handle_int, "I", descr)
 
+/* Oid for an unsigned int.  If ptr is NULL, val is returned. */
+#define	SYSCTL_UINT(parent, nbr, name, access, ptr, val, descr)		\
+	SYSCTL_OID(parent, nbr, name,					\
+	    CTLTYPE_UINT | CTLFLAG_MPSAFE | (access),			\
+	    ptr, val, sysctl_handle_int, "IU", descr)
+
+/* Oid for a long.  The pointer must be non NULL. */
+#define	SYSCTL_LONG(parent, nbr, name, access, ptr, val, descr)		\
+	SYSCTL_OID(parent, nbr, name,					\
+	    CTLTYPE_LONG | CTLFLAG_MPSAFE | (access),			\
+	    ptr, val, sysctl_handle_long, "L", descr)
+
+/* Oid for an unsigned long.  The pointer must be non NULL. */
+#define	SYSCTL_ULONG(parent, nbr, name, access, ptr, val, descr)	\
+	SYSCTL_OID(parent, nbr, name,					\
+	    CTLTYPE_ULONG | CTLFLAG_MPSAFE | (access),			\
+	    ptr, val, sysctl_handle_long, "LU", descr)
+
+/* Oid for a quad.  The pointer must be non NULL. */
+#define	SYSCTL_QUAD(parent, nbr, name, access, ptr, val, descr)		\
+	SYSCTL_OID(parent, nbr, name,					\
+	    CTLTYPE_S64 | CTLFLAG_MPSAFE | (access),			\
+	    ptr, val, sysctl_handle_64, "Q", descr)
+
+#define	SYSCTL_UQUAD(parent, nbr, name, access, ptr, val, descr)	\
+	SYSCTL_ASSERT_TYPE(UINT64, ptr, parent, name);			\
+	SYSCTL_OID(parent, nbr, name,					\
+	    CTLTYPE_U64 | CTLFLAG_MPSAFE | (access),			\
+	    ptr, val, sysctl_handle_64, "QU", descr)
+
+/* Oid for an opaque object.  Specified by a pointer and a length. */
+#define SYSCTL_OPAQUE(parent, nbr, name, access, ptr, len, fmt, descr) \
+	SYSCTL_OID(parent, nbr, name, CTLTYPE_OPAQUE|(access), \
+		ptr, len, sysctl_handle_opaque, fmt, descr)
+
+/* Oid for a struct.  Specified by a pointer and a type. */
+#define SYSCTL_STRUCT(parent, nbr, name, access, ptr, type, descr) \
+	SYSCTL_OID(parent, nbr, name, CTLTYPE_OPAQUE|(access), \
+		ptr, sizeof(struct type), sysctl_handle_opaque, \
+		"S," #type, descr)
+
 /* Oid for a procedure.  Specified by a pointer and an arg. */
 #define SYSCTL_PROC(parent, nbr, name, access, ptr, arg, handler, fmt, descr) \
 	SYSCTL_OID(parent, nbr, name, (access),				 \
 		ptr, arg, handler, fmt, descr)
+
+SYSCTL_DECL(_sysctl);
+SYSCTL_DECL(_kern);
 
 #else	/* !_KERNEL */
 #include <sys/cdefs.h>

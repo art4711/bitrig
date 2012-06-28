@@ -108,7 +108,7 @@
 
 extern struct forkstat forkstat;
 extern struct nchstats nchstats;
-extern int nselcoll, fscale;
+extern int fscale;
 extern struct disklist_head disklist;
 extern fixpt_t ccpu;
 extern  long numvnodes;
@@ -252,10 +252,6 @@ sys___sysctl(struct proc *p, void *v, register_t *retval)
 /*
  * Attributes stored in the kernel.
  */
-char hostname[MAXHOSTNAMELEN];
-int hostnamelen;
-char domainname[MAXHOSTNAMELEN];
-int domainnamelen;
 long hostid;
 char *disknames = NULL;
 struct diskstats *diskstats = NULL;
@@ -272,7 +268,7 @@ int
 kern_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
     size_t newlen, struct proc *p)
 {
-	int error, level, inthostid, stackgap;
+	int error, inthostid, stackgap;
 	dev_t dev;
 	extern int somaxconn, sominconn;
 	extern int usermount, nosuidcoredump;
@@ -313,56 +309,6 @@ kern_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 	}
 
 	switch (name[0]) {
-	case KERN_OSTYPE:
-		return (sysctl_rdstring(oldp, oldlenp, newp, ostype));
-	case KERN_OSRELEASE:
-		return (sysctl_rdstring(oldp, oldlenp, newp, osrelease));
-	case KERN_OSREV:
-		return (sysctl_rdint(oldp, oldlenp, newp, OpenBSD));
-	case KERN_OSVERSION:
-		return (sysctl_rdstring(oldp, oldlenp, newp, osversion));
-	case KERN_VERSION:
-		return (sysctl_rdstring(oldp, oldlenp, newp, version));
-#if 0
-	case KERN_MAXVNODES:
-		return(sysctl_int(oldp, oldlenp, newp, newlen, &maxvnodes));
-	case KERN_MAXPROC:
-		return (sysctl_int(oldp, oldlenp, newp, newlen, &maxprocess));
-#endif
-	case KERN_MAXFILES:
-		return (sysctl_int(oldp, oldlenp, newp, newlen, &maxfiles));
-	case KERN_NFILES:
-		return (sysctl_rdint(oldp, oldlenp, newp, nfiles));
-	case KERN_TTYCOUNT:
-		return (sysctl_rdint(oldp, oldlenp, newp, tty_count));
-	case KERN_NUMVNODES:
-		return (sysctl_rdint(oldp, oldlenp, newp, numvnodes));
-	case KERN_ARGMAX:
-		return (sysctl_rdint(oldp, oldlenp, newp, ARG_MAX));
-	case KERN_NSELCOLL:
-		return (sysctl_rdint(oldp, oldlenp, newp, nselcoll));
-	case KERN_SECURELVL:
-		level = securelevel;
-		if ((error = sysctl_int(oldp, oldlenp, newp, newlen, &level)) ||
-		    newp == NULL)
-			return (error);
-		if ((securelevel > 0 || level < -1) &&
-		    level < securelevel && p->p_pid != 1)
-			return (EPERM);
-		securelevel = level;
-		return (0);
-	case KERN_HOSTNAME:
-		error = sysctl_tstring(oldp, oldlenp, newp, newlen,
-		    hostname, sizeof(hostname));
-		if (newp && !error)
-			hostnamelen = newlen;
-		return (error);
-	case KERN_DOMAINNAME:
-		error = sysctl_tstring(oldp, oldlenp, newp, newlen,
-		    domainname, sizeof(domainname));
-		if (newp && !error)
-			domainnamelen = newlen;
-		return (error);
 	case KERN_HOSTID:
 		inthostid = hostid;  /* XXX assumes sizeof long <= sizeof int */
 		error =  sysctl_int(oldp, oldlenp, newp, newlen, &inthostid);
@@ -2183,6 +2129,7 @@ sysctl_cptime2(int *name, u_int namelen, void *oldp, size_t *oldlenp,
  * Dynamic sysctls.
  */
 
+#define M_SYSCTLTMP M_TEMP
 #define SYSCTL_ASSERT_XLOCKED()
 #define SYSCTL_XLOCK()
 #define SYSCTL_XUNLOCK()
@@ -2191,7 +2138,7 @@ struct sysctl_oid *sysctl_find_oidname(const char *, struct sysctl_oid_list *);
 int sysctl_find_oid(int *, int, struct sysctl_oid **, int *, struct sysctl_req *);
 void sysctl_register_oid(struct sysctl_oid *);
 
-struct sysctl_oid_list sysctl__children;		/* Root list */
+extern struct sysctl_oid_list sysctl__children;		/* Root list */
 
 void
 sysctl_dynamic_init(void)
@@ -2412,6 +2359,123 @@ sysctl_handle_int(struct sysctl_oid *oid, void *arg1, __intptr_t arg2,
 	return (error);
 }
 
+/*
+ * Handle a long, signed or unsigned.  arg1 points to it.
+ */
+int
+sysctl_handle_long(struct sysctl_oid *oid, void *arg1, __intptr_t arg2,
+    struct sysctl_req *req)
+{
+	int error = 0;
+	long tmplong;
+
+	/*
+	 * Attempt to get a coherent snapshot by making a copy of the data.
+	 */
+	if (!arg1)
+		return (EINVAL);
+	tmplong = *(long *)arg1;
+	error = SYSCTL_OUT(req, &tmplong, sizeof(long));
+
+	if (error || !req->newptr)
+		return (error);
+
+	error = SYSCTL_IN(req, arg1, sizeof(long));
+	return (error);
+}
+
+/*
+ * Handle a 64 bit int, signed or unsigned.  arg1 points to it.
+ */
+int
+sysctl_handle_64(struct sysctl_oid *oid, void *arg1, __intptr_t arg2,
+    struct sysctl_req *req)
+{
+	int error = 0;
+	uint64_t tmpout;
+
+	/*
+	 * Attempt to get a coherent snapshot by making a copy of the data.
+	 */
+	if (!arg1)
+		return (EINVAL);
+	tmpout = *(uint64_t *)arg1;
+	error = SYSCTL_OUT(req, &tmpout, sizeof(uint64_t));
+
+	if (error || !req->newptr)
+		return (error);
+
+	error = SYSCTL_IN(req, arg1, sizeof(uint64_t));
+	return (error);
+}
+
+/*
+ * Handle our generic '\0' terminated 'C' string.
+ * Two cases:
+ * 	a variable string:  point arg1 at it, arg2 is max length.
+ * 	a constant string:  point arg1 at it, arg2 is zero.
+ */
+int
+sysctl_handle_string(struct sysctl_oid *oid, void *arg1, __intptr_t arg2,
+    struct sysctl_req *req)
+{
+	int error=0;
+	char *tmparg;
+	size_t outlen;
+
+	/*
+	 * Attempt to get a coherent snapshot by copying to a
+	 * temporary kernel buffer.
+	 */
+retry:
+	outlen = strlen((char *)arg1)+1;
+	tmparg = malloc(outlen, M_SYSCTLTMP, M_WAITOK);
+
+	if (strlcpy(tmparg, (char *)arg1, outlen) >= outlen) {
+		free(tmparg, M_SYSCTLTMP);
+		goto retry;
+	}
+	if ((oid->oid_kind & CTLFLAG_TSTR) &&
+	    outlen >= req->oldlen - req->oldidx &&
+	    req->oldidx < req->oldlen) {
+		tmparg[req->oldlen - req->oldidx - 1] = '\0';
+	}
+
+	error = SYSCTL_OUT(req, tmparg, outlen);
+	free(tmparg, M_SYSCTLTMP);
+
+	if (error || !req->newptr)
+		return (error);
+
+	if ((req->newlen - req->newidx) >= arg2) {
+		error = EINVAL;
+	} else {
+		arg2 = (req->newlen - req->newidx);
+		error = SYSCTL_IN(req, arg1, arg2);
+		((char *)arg1)[arg2] = '\0';
+	}
+
+	return (error);
+}
+
+/*
+ * Handle any kind of opaque data.
+ * arg1 points to it, arg2 is the size.
+ */
+int
+sysctl_handle_opaque(struct sysctl_oid *oid, void *arg1, __intptr_t arg2,
+    struct sysctl_req *req)
+{
+	int error;
+
+	error = SYSCTL_OUT(req, arg1, arg2);
+	if (error)
+		return (error);
+	error = SYSCTL_IN(req, arg1, arg2);
+
+	return (error);
+}
+
 int
 sysctl_user_out(struct sysctl_req *req, const void *p, size_t l)
 {
@@ -2446,8 +2510,6 @@ sysctl_user_in(struct sysctl_req *req, const void *p, size_t l)
 	req->newidx += l;
 	return (error);
 }
-
-SYSCTL_NODE(, 0, sysctl, CTLFLAG_RW, 0, "Sysctl internal magic");
 
 static int
 sysctl_sysctl_name(struct sysctl_oid *oidp, void *arg1, __intptr_t arg2,
@@ -2506,7 +2568,7 @@ sysctl_sysctl_name(struct sysctl_oid *oidp, void *arg1, __intptr_t arg2,
 	SYSCTL_XUNLOCK();
 	return (error);
 }
-SYSCTL_NODE(_sysctl, 1, name, CTLFLAG_RD, sysctl_sysctl_name, "");
+static SYSCTL_NODE(_sysctl, 1, name, CTLFLAG_RD, sysctl_sysctl_name, "");
 
 static int
 sysctl_sysctl_next_ls(struct sysctl_oid_list *lsp, int *name, u_int namelen, 
@@ -2742,7 +2804,3 @@ sysctl_sysctl_oiddescr(struct sysctl_oid *oidp, void *arg1, __intptr_t arg2,
 
 static SYSCTL_NODE(_sysctl, 5, oiddescr, CTLFLAG_RD,
     sysctl_sysctl_oiddescr, "");
-
-SYSCTL_NODE(, 1, kern, CTLFLAG_RW, 0, "Kernel");
-static SYSCTL_INT(_kern, KERN_MAXVNODES, maxvnodes, CTLFLAG_RW, &maxvnodes, 0, "Max number of vnodes");
-static SYSCTL_INT(_kern, KERN_MAXPROC, maxproc, CTLFLAG_RW, &maxprocess, 0, "Maximum numver of processes");

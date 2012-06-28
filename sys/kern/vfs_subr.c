@@ -108,6 +108,7 @@ void vputonfreelist(struct vnode *);
 
 int vflush_vnode(struct vnode *, void *);
 int maxvnodes;
+static SYSCTL_INT(_kern, KERN_MAXVNODES, maxvnodes, CTLFLAG_RW, &maxvnodes, 0, "Max number of vnodes");
 
 #ifdef DEBUG
 void printlockedvnodes(void);
@@ -301,6 +302,9 @@ vattr_null(struct vattr *vap)
  * Routines having to do with the management of the vnode table.
  */
 long numvnodes;
+static SYSCTL_LONG(_kern, KERN_OSREV, osrevision, CTLFLAG_RD, &numvnodes, 0,
+    "Number of vnodes");
+
 
 /*
  * Return the next vnode from the free list.

@@ -60,6 +60,7 @@
 #include <sys/event.h>
 #include <sys/pool.h>
 #include <sys/ktrace.h>
+#include <sys/sysctl.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -70,6 +71,9 @@
  */
 struct filelist filehead;	/* head of list of open files */
 int nfiles;			/* actual number of open files */
+
+static SYSCTL_INT(_kern, KERN_MAXFILES, maxfiles, CTLFLAG_RW, &maxfiles, 0, "Maximum number of open files");
+static SYSCTL_INT(_kern, KERN_NFILES, nfiles, CTLFLAG_RD, &nfiles, 0, "Currently open files");
 
 static __inline void fd_used(struct filedesc *, int);
 static __inline void fd_unused(struct filedesc *, int);

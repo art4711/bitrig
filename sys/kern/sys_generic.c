@@ -56,7 +56,7 @@
 #include <sys/ktrace.h>
 #endif
 #include <sys/sched.h>
-
+#include <sys/sysctl.h>
 #include <sys/mount.h>
 #include <sys/syscallargs.h>
 
@@ -520,6 +520,9 @@ out:
 }
 
 int	selwait, nselcoll;
+static SYSCTL_INT(_kern, KERN_NSELCOLL, nselcoll, CTLFLAG_RD, &nselcoll, 0,
+    "Number of select collissions");
+
 
 /*
  * Select system call.
