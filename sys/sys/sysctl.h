@@ -947,7 +947,6 @@ struct walkarg;
 int sysctl_dumpentry(struct radix_node *, void *, u_int);
 int sysctl_iflist(int, struct walkarg *);
 int sysctl_rtable(int *, u_int, void *, size_t *, void *, size_t);
-int sysctl_clockrate(char *, size_t *, void *);
 int sysctl_vnode(char *, size_t *, struct proc *);
 #ifdef GPROF
 int sysctl_doprof(int *, u_int, void *, size_t *, void *, size_t);

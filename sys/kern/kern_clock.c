@@ -475,8 +475,11 @@ statclock(struct clockframe *frame)
 /*
  * Return information about system clocks.
  */
+int sysctl_clockrate(struct sysctl_oid *, void *, __intptr_t,
+    struct sysctl_req *);
 int
-sysctl_clockrate(char *where, size_t *sizep, void *newp)
+sysctl_clockrate(struct sysctl_oid *oidp, void *arg1, __intptr_t arg2,
+    struct sysctl_req *req)
 {
 	struct clockinfo clkinfo;
 
@@ -488,5 +491,9 @@ sysctl_clockrate(char *where, size_t *sizep, void *newp)
 	clkinfo.hz = hz;
 	clkinfo.profhz = profhz;
 	clkinfo.stathz = stathz ? stathz : hz;
-	return (sysctl_rdstruct(where, sizep, newp, &clkinfo, sizeof(clkinfo)));
+	return sysctl_handle_opaque(oidp, &clkinfo, sizeof(clkinfo), req);
 }
+
+static SYSCTL_PROC(_kern, KERN_CLOCKRATE, clockrate,
+    CTLTYPE_STRING|CTLFLAG_RD|CTLFLAG_MPSAFE,
+    0, 0, sysctl_clockrate, "S,clockinfo", "Rate of various kernel clocks");

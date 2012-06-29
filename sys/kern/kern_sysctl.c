@@ -303,8 +303,6 @@ kern_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 	}
 
 	switch (name[0]) {
-	case KERN_CLOCKRATE:
-		return (sysctl_clockrate(oldp, oldlenp, newp));
 	case KERN_BOOTTIME:
 		return (sysctl_rdstruct(oldp, oldlenp, newp, &boottime,
 		    sizeof(struct timeval)));
