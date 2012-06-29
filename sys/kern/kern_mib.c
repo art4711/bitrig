@@ -102,3 +102,7 @@ static struct hostname_sysctl domainname_sysctl = {
 static SYSCTL_PROC(_kern, KERN_DOMAINNAME, domainname,
     CTLTYPE_STRING|CTLFLAG_RW,
     &domainname_sysctl, 0, sysctl_hostname, "A", "Domain name");
+
+long hostid;
+static SYSCTL_INT(_kern, KERN_HOSTID, hostid, CTLFLAG_RW, &hostid, 0,
+    "Host ID");

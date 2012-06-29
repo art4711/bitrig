@@ -128,6 +128,8 @@ extern	struct user *proc0paddr;
 struct	vnode *rootvp, *swapdev_vp;
 int	boothowto;
 struct	timeval boottime;
+static SYSCTL_STRUCT(_kern, KERN_BOOTTIME, boottime, CTLFLAG_RD, &boottime,
+    timeval, "System boot time");
 int	ncpus =  1;
 int	ncpusfound = 1;			/* number of cpus we find */
 __volatile int start_init_exec;		/* semaphore for start_init() */

@@ -252,7 +252,6 @@ sys___sysctl(struct proc *p, void *v, register_t *retval)
 /*
  * Attributes stored in the kernel.
  */
-long hostid;
 char *disknames = NULL;
 struct diskstats *diskstats = NULL;
 #ifdef INSECURE
@@ -268,7 +267,7 @@ int
 kern_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
     size_t newlen, struct proc *p)
 {
-	int error, inthostid, stackgap;
+	int error, stackgap;
 	dev_t dev;
 	extern int somaxconn, sominconn;
 	extern int usermount, nosuidcoredump;
@@ -309,11 +308,6 @@ kern_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 	}
 
 	switch (name[0]) {
-	case KERN_HOSTID:
-		inthostid = hostid;  /* XXX assumes sizeof long <= sizeof int */
-		error =  sysctl_int(oldp, oldlenp, newp, newlen, &inthostid);
-		hostid = inthostid;
-		return (error);
 	case KERN_CLOCKRATE:
 		return (sysctl_clockrate(oldp, oldlenp, newp));
 	case KERN_BOOTTIME:
