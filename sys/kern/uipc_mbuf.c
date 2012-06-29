@@ -82,6 +82,7 @@
 #include <sys/domain.h>
 #include <sys/protosw.h>
 #include <sys/pool.h>
+#include <sys/sysctl.h>
 
 #include <sys/socket.h>
 #include <sys/socketvar.h>
@@ -98,6 +99,9 @@
 #endif
 
 struct	mbstat mbstat;		/* mbuf stats */
+static SYSCTL_STRUCT(_kern, KERN_MBSTAT, mbstat, CTLFLAG_RD, &mbstat,
+    mbstat, "Mbuf allocation statistics");
+
 struct	pool mbpool;		/* mbuf pool */
 
 /* mbuf cluster pools */

@@ -303,9 +303,6 @@ kern_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 	}
 
 	switch (name[0]) {
-	case KERN_BOOTTIME:
-		return (sysctl_rdstruct(oldp, oldlenp, newp, &boottime,
-		    sizeof(struct timeval)));
 	case KERN_VNODE:
 		return (sysctl_vnode(oldp, oldlenp, p));
 #ifndef SMALL_KERNEL
@@ -322,9 +319,6 @@ kern_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 #endif
 	case KERN_FILE:
 		return (sysctl_file(oldp, oldlenp, p));
-	case KERN_MBSTAT:
-		return (sysctl_rdstruct(oldp, oldlenp, newp, &mbstat,
-		    sizeof(mbstat)));
 #ifdef GPROF
 	case KERN_PROF:
 		return (sysctl_doprof(name + 1, namelen - 1, oldp, oldlenp,
