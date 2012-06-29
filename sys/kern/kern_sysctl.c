@@ -254,11 +254,6 @@ sys___sysctl(struct proc *p, void *v, register_t *retval)
  */
 char *disknames = NULL;
 struct diskstats *diskstats = NULL;
-#ifdef INSECURE
-int securelevel = -1;
-#else
-int securelevel;
-#endif
 
 /*
  * kernel related system variables.

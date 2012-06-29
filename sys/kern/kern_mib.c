@@ -35,6 +35,7 @@
 
 #include <sys/param.h>
 #include <sys/sysctl.h>
+#include <sys/proc.h>
 
 /*
  * Top level sysctl mib and sysctls that don't belong anywhere specific.
@@ -106,3 +107,31 @@ static SYSCTL_PROC(_kern, KERN_DOMAINNAME, domainname,
 long hostid;
 static SYSCTL_INT(_kern, KERN_HOSTID, hostid, CTLFLAG_RW, &hostid, 0,
     "Host ID");
+
+#ifdef INSECURE
+int securelevel = -1;
+#else
+int securelevel;
+#endif
+
+int sysctl_securelevel(struct sysctl_oid *, void *, __intptr_t,
+    struct sysctl_req *);
+
+int
+sysctl_securelevel(struct sysctl_oid *oidp, void *arg1, __intptr_t arg2,
+    struct sysctl_req *req)
+{
+	int level = securelevel;
+	int error;
+
+	error = sysctl_handle_int(oidp, &level, 0, req);
+	if (error || req->newptr == NULL)
+		return error;
+	if ((securelevel > 0 || level < -1) &&
+	    level < securelevel && curproc->p_pid != 1)
+		return EPERM;
+	securelevel = level;
+	return 0;
+}
+static SYSCTL_PROC(_kern, KERN_SECURELVL, securelevel, CTLTYPE_INT|CTLFLAG_RW,
+    NULL, 0, sysctl_securelevel, "I", "Current securelevel");
