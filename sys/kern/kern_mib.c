@@ -36,6 +36,8 @@
 #include <sys/param.h>
 #include <sys/sysctl.h>
 #include <sys/proc.h>
+#include <sys/unistd.h>
+#include <sys/disklabel.h>
 
 /*
  * Top level sysctl mib and sysctls that don't belong anywhere specific.
@@ -135,3 +137,16 @@ sysctl_securelevel(struct sysctl_oid *oidp, void *arg1, __intptr_t arg2,
 }
 static SYSCTL_PROC(_kern, KERN_SECURELVL, securelevel, CTLTYPE_INT|CTLFLAG_RW,
     NULL, 0, sysctl_securelevel, "I", "Current securelevel");
+
+static SYSCTL_INT(_kern, KERN_POSIX1, posix1version, CTLFLAG_RD, 0,
+    _POSIX_VERSION, "Posix 1 version");
+static SYSCTL_INT(_kern, KERN_NGROUPS, ngroups, CTLFLAG_RD, 0,
+    NGROUPS_MAX, "Maximum number of groups a user can belong to");
+static SYSCTL_INT(_kern, KERN_JOB_CONTROL, job_control, CTLFLAG_RD, 0,
+    1, "Whether job control is available");
+static SYSCTL_INT(_kern, KERN_SAVED_IDS, saved_ids, CTLFLAG_RD, 0,
+    1, "Whether saved set-group/user ID is available");
+static SYSCTL_INT(_kern, KERN_MAXPARTITIONS, maxpartitions, CTLFLAG_RD, 0,
+    MAXPARTITIONS, "Maximum number of partitions per disk");
+static SYSCTL_INT(_kern, KERN_RAWPARTITION, rawpartition, CTLFLAG_RD, 0,
+    RAW_PART, "Raw partition number");

@@ -62,6 +62,8 @@
 
 extern int suid_clear;
 int	usermount = 0;		/* sysctl: by default, users may not mount */
+static SYSCTL_INT(_kern, KERN_USERMOUNT, usermount, CTLFLAG_RW, &usermount,
+    0, "Allow mounts by normal users");
 
 static int change_dir(struct nameidata *, struct proc *);
 

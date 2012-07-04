@@ -50,6 +50,7 @@
 #include <sys/resourcevar.h>
 #include <net/route.h>
 #include <sys/pool.h>
+#include <sys/sysctl.h>
 
 void	sbsync(struct sockbuf *, struct mbuf *);
 
@@ -78,6 +79,11 @@ struct filterops sowrite_filtops =
 
 int	somaxconn = SOMAXCONN;
 int	sominconn = SOMINCONN;
+
+static SYSCTL_INT(_kern, KERN_SOMAXCONN, somaxconn, CTLFLAG_RW, &somaxconn,
+    0, "Maximum pending socket connection queue size");
+static SYSCTL_INT(_kern, KERN_SOMINCONN, sominconn, CTLFLAG_RW, &sominconn,
+    0, "minimum pending socket connection queue size");
 
 struct pool socket_pool;
 

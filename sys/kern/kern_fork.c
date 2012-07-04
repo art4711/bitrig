@@ -56,6 +56,7 @@
 #include <sys/pool.h>
 #include <sys/mman.h>
 #include <sys/ptrace.h>
+#include <sys/sysctl.h>
 
 #include <sys/syscallargs.h>
 
@@ -74,6 +75,14 @@ int	nthreads = 1;		/* proc 0 */
 int	randompid;		/* when set to 1, pid's go random */
 pid_t	lastpid;
 struct	forkstat forkstat;
+
+static SYSCTL_INT(_kern, KERN_MAXPROC, maxproc, CTLFLAG_RW, &maxprocess,
+    0, "Maximum number of processes");
+static SYSCTL_INT(_kern, KERN_MAXTHREAD, maxthread, CTLFLAG_RW, &maxthread,
+    0, "Max number of threads");
+static SYSCTL_INT(_kern, KERN_NTHREADS, nthreads, CTLFLAG_RD, &nthreads,
+    0, "Current number of active threads");
+
 
 void fork_return(void *);
 void tfork_child_return(void *);

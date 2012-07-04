@@ -122,6 +122,7 @@
 #include <sys/mutex.h>
 #include <sys/workq.h>
 #include <sys/msgbuf.h>
+#include <sys/sysctl.h>
 
 #include <crypto/md5.h>
 #include <crypto/arc4.h>
@@ -220,6 +221,29 @@ struct rand_event *rnd_event_tail = rnd_event_space;
 
 struct timeout rnd_timeout;
 struct rndstats rndstats;
+static SYSCTL_STRUCT(_kern, KERN_RND, random, CTLFLAG_RD, &rndstats,
+    rndstats, "Kernel randomness pool statistics");
+
+int sysctl_arandom(struct sysctl_oid *, void *, __intptr_t,
+    struct sysctl_req *);
+int
+sysctl_arandom(struct sysctl_oid *oidp, void *arg1, __intptr_t arg2,
+    struct sysctl_req *req)
+{
+	char buf[256];
+	size_t len;
+
+	len = MIN(req->oldlen, sizeof(buf));
+	if (len == 0)
+		len = sizeof(int);
+	arc4random_buf(buf, len);
+	return SYSCTL_OUT(req, buf, len);
+}
+
+static SYSCTL_PROC(_kern, KERN_ARND, arandom,
+    CTLTYPE_OPAQUE|CTLFLAG_RD,
+    0, 0, sysctl_arandom, "I", "arc4random");
+
 
 u_int32_t entropy_pool[POOLWORDS];
 u_int	entropy_add_ptr;

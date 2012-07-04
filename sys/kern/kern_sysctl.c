@@ -264,8 +264,7 @@ kern_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 {
 	int error, stackgap;
 	dev_t dev;
-	extern int somaxconn, sominconn;
-	extern int usermount, nosuidcoredump;
+	extern int nosuidcoredump;
 	extern long cp_time[CPUSTATES];
 	extern int stackgap_random;
 #ifdef CRYPTO
@@ -324,31 +323,6 @@ kern_sysctl(int *name, u_int namelen, void *oldp, size_t *oldlenp, void *newp,
 		return (sysctl_doprof(name + 1, namelen - 1, oldp, oldlenp,
 		    newp, newlen));
 #endif
-	case KERN_POSIX1:
-		return (sysctl_rdint(oldp, oldlenp, newp, _POSIX_VERSION));
-	case KERN_NGROUPS:
-		return (sysctl_rdint(oldp, oldlenp, newp, NGROUPS_MAX));
-	case KERN_JOB_CONTROL:
-		return (sysctl_rdint(oldp, oldlenp, newp, 1));
-	case KERN_SAVED_IDS:
-		return (sysctl_rdint(oldp, oldlenp, newp, 1));
-	case KERN_MAXPARTITIONS:
-		return (sysctl_rdint(oldp, oldlenp, newp, MAXPARTITIONS));
-	case KERN_RAWPARTITION:
-		return (sysctl_rdint(oldp, oldlenp, newp, RAW_PART));
-	case KERN_MAXTHREAD:
-		return (sysctl_int(oldp, oldlenp, newp, newlen, &maxthread));
-	case KERN_NTHREADS:
-		return (sysctl_rdint(oldp, oldlenp, newp, nthreads));
-	case KERN_SOMAXCONN:
-		return (sysctl_int(oldp, oldlenp, newp, newlen, &somaxconn));
-	case KERN_SOMINCONN:
-		return (sysctl_int(oldp, oldlenp, newp, newlen, &sominconn));
-	case KERN_USERMOUNT:
-		return (sysctl_int(oldp, oldlenp, newp, newlen, &usermount));
-	case KERN_RND:
-		return (sysctl_rdstruct(oldp, oldlenp, newp, &rndstats,
-		    sizeof(rndstats)));
 	case KERN_ARND: {
 		char buf[256];
 
