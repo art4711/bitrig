@@ -521,6 +521,7 @@ show_var(int *oid, int nlen)
 	fmt = (char *)buf;
 	oidfmt(oid, nlen, fmt, &kind);
 	p = val;
+again:
 	ctltype = (kind & CTLTYPE_MASK);
 	sign = ctl_sign[ctltype];
 	intlen = ctl_size[ctltype];
@@ -590,7 +591,15 @@ show_var(int *oid, int nlen)
 			func = S_loadavg;
 		else if (strcmp(fmt, "S,vmtotal") == 0)
 			func = S_vmtotal;
-		else
+		else if (strcmp(fmt, "I") == 0) {
+			/*
+			 * Special case. There are opaque buffers
+			 * that make sense to read as one int.
+			 */
+			kind = CTLTYPE_INT;
+			len = sizeof(int);
+			goto again;
+		} else
 			func = NULL;
 		if (func) {
 			if (!nflag)
